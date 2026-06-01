@@ -1,11 +1,14 @@
 name: Build Android APK
 
 on:
-  workflow_dispatch:          # run manually from Actions tab
+  workflow_dispatch:
   push:
     branches: [ master ]
   pull_request:
     branches: [ master ]
+
+env:
+  FLUTTER_VERSION: '3.41.6'
 
 jobs:
   build-android:
@@ -13,61 +16,58 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # ── 1. Checkout ────────────────────────────────────────────────────────
+      # ── 1. Checkout (Node 24) ──────────────────────────────────────────────
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           submodules: recursive
 
-      # ── 2. Java 17 (required by inventree-app BUILDING.md) ─────────────────
+      # ── 2. Java 17 (Node 24) ──────────────────────────────────────────────
       - name: Set up JDK 17
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '17'
 
-      # ── 3. Flutter 3.41.6 (pinned from .fvmrc) ─────────────────────────────
+      # ── 3. Flutter 3.41.6 ─────────────────────────────────────────────────
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.41.6'
+          flutter-version: ${{ env.FLUTTER_VERSION }}
           channel: stable
           cache: true
 
-      # ── 4. Python + invoke (used by the project's tasks.py) ────────────────
+      # ── 4. Python + invoke (Node 24) ──────────────────────────────────────
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: '3.11'
 
       - name: Install invoke
         run: pip install invoke
 
-      # ── 5. Install Flutter dependencies ────────────────────────────────────
+      # ── 5. Flutter dependencies ───────────────────────────────────────────
       - name: Install Flutter packages
         run: flutter pub get
 
-      # ── 6. Generate translation files (required before build) ───────────────
+      # ── 6. Translations ───────────────────────────────────────────────────
       - name: Generate translations
         run: invoke translate
-        continue-on-error: true   # non-fatal if crowdin strings already present
+        continue-on-error: true
 
-      # ── 7. Analyse (optional – remove to skip) ─────────────────────────────
+      # ── 7. Lint (optional) ────────────────────────────────────────────────
       - name: Analyse code
         run: flutter analyze --no-fatal-infos
         continue-on-error: true
 
-      # ── 8. Build release APK ────────────────────────────────────────────────
-      - name: Build APK (release)
+      # ── 8. Build APK ──────────────────────────────────────────────────────
+      - name: Build APK (release, split per ABI)
         run: flutter build apk --release --split-per-abi
 
-      # ── 9. Upload APK artifacts ─────────────────────────────────────────────
+      # ── 9. Upload artifacts (Node 24) ─────────────────────────────────────
       - name: Upload APK artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: inventree-android-apks
           retention-days: 30
-          path: |
-            build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
-            build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk
-            build/app/outputs/flutter-apk/app-x86_64-release.apk
+          path: build/app/outputs/flutter-apk/app-*-release.apk
